@@ -1,51 +1,83 @@
 
-use cursive::{views::{Dialog, TextView, EditView}, Cursive, view::{Nameable, Resizable}};
 
+use cursive::{views::{Dialog, TextView, EditView, LinearLayout}, Cursive, view::{Nameable, Resizable}};
 
 fn main() {
     // Creates the cursive root - required for every application.
     let mut siv = cursive::default();
 
-    let message = String::from("Hello World!");
+    // Initialize Task Vec
+    let tasks:Vec<String> = vec![];
     
-    siv.add_layer(Dialog::around(TextView::new(message.clone()))
-        .title("Welcome")
-        .button("Dummy", move |s| {
-            rewrite_message(s,message.clone());
-        })
-        .button("Quit", |s| s.quit()));
+    // Render Homescreen
+    render_home(&mut siv, tasks);
     
-        // Starts the event loop.    
-    siv.run();
-    
+    // Starts the event loop.    
+    siv.run();   
 }
 
-fn re_render_home(s: &mut Cursive, new_message: String) {
-    let message:String = String::from(new_message);
+fn render_home(s: &mut Cursive, tasks: Vec<String>) {
+    let ftasks: Vec<String> = Vec::from(tasks.clone());
+    let mut message = String::new();
+    if (ftasks.len() <= 0) {
+        message = String::from("No Tasks!");
+    } else {
+        message = String::from("Task List: ");
+    }
+
+    let mut list = LinearLayout::vertical();
+    list.insert_child(0, TextView::new(message.clone()));
+    for (i, task) in tasks.iter().enumerate() {
+        let new_string = format!("{}) {}", i, task.to_string());
+        list.insert_child(i+1,TextView::new(new_string));
+    }
+
     s.pop_layer();
-    s.add_layer(Dialog::around(TextView::new(message.clone()))
-        .title("Welcome")
-        .button("Dummy", move |s| {
-            rewrite_message(s, message.clone());
+    s.add_layer(Dialog::around(list)
+        .title("Tasks")
+        .button("Add Task", move |s| {
+            new_task(s, ftasks.clone());
         }
         )
-        .button("Quit", |s| s.quit())); 
+        .button("Quit", move |s| {
+            print_final_list(s, tasks.clone());
+        })); 
 }
 
-fn rewrite_message(s: &mut Cursive,old_msg:String) {
+fn print_final_list(s: &mut Cursive,tasks: Vec<String>) {
+    s.pop_layer();
+
+    let mut list = LinearLayout::vertical();
+    for (i, task) in tasks.iter().enumerate() {
+        let new_string = format!("{}) {}", i, task.to_string());
+        list.insert_child(i,TextView::new(new_string));
+    }
+    
+    s.add_layer(Dialog::around(list)
+        .title("Tasks")
+        .button("Quit", move |s| {
+            s.quit();
+        }));
+}
+
+fn new_task(s: &mut Cursive,tasks:Vec<String>) {
+    let ftasks = tasks.clone();
+
     s.pop_layer();
     s.add_layer(Dialog::around(EditView::new()
             .with_name("name")
             .fixed_width(20))
         .title("Enter a new message")
-        .button("Ok", |s| {
+        .button("Ok", move|s| {
+            let mut fftasks = ftasks.clone();
             let name =
                 s.call_on_name("name", |view: &mut EditView| {
                     view.get_content()
                 }).unwrap();
-                re_render_home(s,name.to_string());
+            fftasks.push(name.to_string());
+            render_home(s,fftasks);
         })
         .button("Cancel", move |s| {
-            re_render_home(s,old_msg.to_string());
+            render_home(s,tasks.clone());
         }));    
 }
