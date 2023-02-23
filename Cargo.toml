@@ -8,6 +8,8 @@ edition = "2021"
 
 [dependencies]
 cursive = "0.20"
+rand = "*"
+cursive_table_view = "*"
 serde = "*"
 serde_derive = "*"
 serde_json = "*"
