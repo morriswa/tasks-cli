@@ -3,15 +3,12 @@ use std::cmp::Ordering;
 
 use cursive::{
     Cursive, 
-    view::{
-        Nameable, Resizable
-    },
-    views::{
-        Dialog, TextView, EditView, LinearLayout
-    }, align::HAlign, 
+    view::{Nameable, Resizable},
+    views::{Dialog, TextView, EditView, LinearLayout}, 
+    align::HAlign, 
 };
 use cursive_table_view::{TableView, TableViewItem};
-use rand::Rng;
+use serde_derive::{Serialize, Deserialize};
 
 /*
     Author:         William A. Morris
@@ -26,24 +23,34 @@ const DATASTORE: (&str, &str) = (".wma/","tasks.json");
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum BasicColumn {
+    ID,
     Name,
-    Count,
-    Rate,
+    Category,
+    Due,
 }
 
 #[derive(Clone, Debug)]
-struct Foo {
+struct ExTask {
+    id: usize,
     name: String,
-    count: usize,
-    rate: usize,
+    category: String,
+    due: String,
 }
 
-impl TableViewItem<BasicColumn> for Foo {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Task {
+    name: String,
+    category: String,
+    due: String,
+}
+
+impl TableViewItem<BasicColumn> for ExTask {
     fn to_column(&self, column: BasicColumn) -> String {
         match column {
+            BasicColumn::ID => format!("{}",self.id),
             BasicColumn::Name => self.name.to_string(),
-            BasicColumn::Count => format!("{}", self.count),
-            BasicColumn::Rate => format!("{}", self.rate),
+            BasicColumn::Category => self.category.to_string(),
+            BasicColumn::Due => self.due.to_string(),
         }
     }
 
@@ -52,9 +59,10 @@ impl TableViewItem<BasicColumn> for Foo {
         Self: Sized,
     {
         match column {
+            BasicColumn::ID => self.id.cmp(&other.id),
             BasicColumn::Name => self.name.cmp(&other.name),
-            BasicColumn::Count => self.count.cmp(&other.count),
-            BasicColumn::Rate => self.rate.cmp(&other.rate),
+            BasicColumn::Category => self.category.cmp(&other.category),
+            BasicColumn::Due => self.due.cmp(&other.due),
         }
     }
 }
@@ -65,76 +73,47 @@ fn main() {
     let mut siv = cursive::default();
 
     // Initialize Task Vec
-    let tasks:Vec<String> = read_from_json();
-    
+    let tasks:Vec<Task> = read_from_json();
+ 
     // Render Homescreen
-    render_home(&mut siv, tasks);
+    render_home_table(&mut siv, tasks);
     
     // Starts the event loop.    
     siv.run();   
 }
 
-fn render_home(s: &mut Cursive, tasks: Vec<String>) {
-    let tasks_closure_add_task: Vec<String> = Vec::from(tasks.clone());
-    let tasks_closure_del_task: Vec<String> = Vec::from(tasks.clone()); 
-
-    let message: String;
-    if tasks.len() <= 0 {
-        message = String::from("No Tasks!");
-    } else {
-        message = String::from("Task List: ");
-    }
-
-    let mut list = LinearLayout::vertical();
-    list.insert_child(0, TextView::new(message.clone()));
-    for (i, task) in tasks.iter().enumerate() {
-        let new_string = format!("{}) {}", i, task.to_string());
-        list.insert_child(i+1,TextView::new(new_string));
-    }
-
+fn quit_n_save_menu(s: &mut Cursive,tasks: Vec<Task>) {
     s.pop_layer();
-    s.add_layer(Dialog::around(list)
-        .title("Tasks")
-        .button("Add Task", move |s| {
-            new_task(s, tasks_closure_add_task.clone());
-        })
-        .button("Del Task", move |s| {
-            del_task(s, tasks_closure_del_task.clone());
-        }) 
-        .button("Quit", move |s| {
-            print_final_list(s, tasks.clone());
-        })
-        // .button("Dev Table", render_dummy_table)
-    ); 
-}
-
-fn print_final_list(s: &mut Cursive,tasks: Vec<String>) {
-    s.pop_layer();
-
-    let mut list = LinearLayout::vertical();
-    for (i, task) in tasks.iter().enumerate() {
-        let new_string = format!("{}) {}", i, task.to_string());
-        list.insert_child(i,TextView::new(new_string));
-    }
-    
-    s.add_layer(Dialog::around(list)
-        .title("Task List")
-        .button("Save N Quit", move |s| {
+    s.add_layer(Dialog::around(TextView::new("Would you like to Save?"))
+        .title("Exit Menu")
+        .button("Yes!", move |s| {
             write_to_json(tasks.clone());
             s.quit()
         })
-        .button("Quit without Save", move |s| {
+        .button("No :(", move |s| {
             s.quit();
         }));
 }
 
-fn new_task(s: &mut Cursive, given_tasks:Vec<String>) {
+fn new_task(s: &mut Cursive, given_tasks:Vec<Task>) {
     let given_tasks_move_for_callback = given_tasks.clone();
 
-    s.pop_layer();
-    s.add_layer(Dialog::around(EditView::new()
+    let layout = LinearLayout::vertical()
+        .child(TextView::new("Task Name"))
+        .child(EditView::new()
             .with_name("name")
             .fixed_width(20))
+        .child(TextView::new("Category"))
+        .child(EditView::new()
+            .with_name("cat")
+            .fixed_width(20))
+        .child(TextView::new("Due Date"))
+        .child(EditView::new()
+            .with_name("due")
+            .fixed_width(11));
+
+    s.pop_layer();
+    s.add_layer(Dialog::around(layout)
         .title("Add Task Menu")
         .button("Ok", move|s| {
             let mut tasks = given_tasks_move_for_callback.clone();
@@ -142,15 +121,27 @@ fn new_task(s: &mut Cursive, given_tasks:Vec<String>) {
                 s.call_on_name("name", |view: &mut EditView| {
                     view.get_content()
                 }).unwrap();
-            tasks.push(name.to_string());
-            render_home(s,tasks);
+            let cat =
+                s.call_on_name("cat", |view: &mut EditView| {
+                    view.get_content()
+                }).unwrap();
+            let due =
+                s.call_on_name("due", |view: &mut EditView| {
+                    view.get_content()
+                }).unwrap();
+            tasks.push(Task { 
+                name: name.to_string(), 
+                category: cat.to_string(), 
+                due: due.to_string(),
+            });
+            render_home_table(s,tasks);
         })
         .button("Cancel", move |s| {
-            render_home(s,given_tasks.clone());
+            render_home_table(s,given_tasks.clone());
         }));    
 }
 
-fn del_task(s: &mut Cursive, tasks: Vec<String>) {
+fn del_task(s: &mut Cursive, tasks: Vec<Task>) {
     let tasks_for_callback = tasks.clone();
 
     s.pop_layer();
@@ -166,49 +157,57 @@ fn del_task(s: &mut Cursive, tasks: Vec<String>) {
                 }).unwrap();
             let todel: usize = str::parse::<usize>(&todel).unwrap_or(ftasks.len());
             if todel >= ftasks.len() {
-                render_home(s,ftasks);
+                render_home_table(s,ftasks);
             } else {
                 ftasks.remove(todel);
-                render_home(s,ftasks); 
+                render_home_table(s,ftasks); 
             }
-            
         })
         .button("Cancel", move |s| {
-            render_home(s,tasks.clone());
+            render_home_table(s,tasks.clone());
         }));     
 }
 
-fn render_dummy_table(s: &mut Cursive) {
-    let mut items = Vec::new();
-    let mut rng = rand::thread_rng();
+fn render_home_table(s: &mut Cursive, tasks: Vec<Task>) {
+    let tasks_closure_add_task: Vec<Task> = Vec::from(tasks.clone());
+    let tasks_closure_del_task: Vec<Task> = Vec::from(tasks.clone()); 
 
-    for i in 0..50 {
-        items.push(Foo {
-            name: format!("Name {}", i),
-            count: rng.gen_range(0..=255),
-            rate: rng.gen_range(0..=255),
-        });
+    let items = tasks.clone();
+    let mut exitems: Vec<ExTask> = vec![];
+    for (i, task) in items.iter().enumerate() {
+        exitems.push(ExTask { id: i, name: task.name.clone(), category: task.category.clone(), due: task.due.clone() });
     }
-    
-    let table = TableView::<Foo, BasicColumn>::new()
-        .column(BasicColumn::Name, "Name", |c| c.width_percent(20))
-        .column(BasicColumn::Count, "Count", |c| c.align(HAlign::Center))
-        .column(BasicColumn::Rate, "Rate", |c| {
-            c.ordering(Ordering::Greater)
+
+    let table = TableView::<ExTask, BasicColumn>::new()
+        .column(BasicColumn::ID, "ID", |c| c.width_percent(10))
+        .column(BasicColumn::Name, "Name", |c| c.width_percent(40))
+        .column(BasicColumn::Category, "Category", |c| {
+            c   .align(HAlign::Center)
+                .width_percent(30)            
+        })
+        .column(BasicColumn::Due, "Due", |c| {
+            c   .ordering(Ordering::Greater)
                 .align(HAlign::Right)
                 .width_percent(20)
         })
-        .items(items)
-        .min_size((50, 20));
-
+        .items(exitems)
+        .min_size((100, 20));
 
     s.pop_layer();
-    s.add_layer(Dialog::around(table
-    )
-        .button("Bye", |s| s.quit()));
+    s.add_layer(Dialog::around(table)
+        .title("Task Table")
+        .button("Add Task", move |s| {
+            new_task(s, tasks_closure_add_task.clone());
+        })
+        .button("Del Task", move |s| {
+            del_task(s, tasks_closure_del_task.clone());
+        }) 
+        .button("Quit", move |s| {
+            quit_n_save_menu(s, tasks.clone())
+        }));
 }
 
-fn write_to_json(vec: Vec<String>) {
+fn write_to_json(vec: Vec<Task>) {
     let home_dir = dirs::home_dir().unwrap();
     let dir = home_dir.as_path().join(DATASTORE.0);
     if !dir.is_dir() {
@@ -222,10 +221,10 @@ fn write_to_json(vec: Vec<String>) {
     }
 }
 
-fn read_from_json() -> Vec<String> {
+fn read_from_json() -> Vec<Task> {
     let home_dir = dirs::home_dir().unwrap();
     let path = home_dir.as_path().join(DATASTORE.0).join(DATASTORE.1);
     let db_content = std::fs::read_to_string(path.as_path()).unwrap_or_default();
-    let parsed: Vec<String> = serde_json::from_str(&db_content).unwrap_or_default();
+    let parsed: Vec<Task> = serde_json::from_str(&db_content).unwrap_or_default();
     parsed
 }
